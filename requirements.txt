@@ -1,0 +1,6 @@
+click>=5.0
+numpy
+Pillow
+scikit-image
+torch>=0.4.0
+torchvision
