@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import numpy as np
 
+import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -14,6 +15,11 @@ from torchvision.transforms import ToTensor, Grayscale, Compose
 
 import click
 
+from skimage.segmentation import slic
+from skimage.measure import regionprops
+
+from PIL import Image
+
 @click.group()
 def cli():
     pass
@@ -21,7 +27,7 @@ def cli():
 @cli.command()
 @click.option('-b', '--batch-size', default=32, help='batch size')
 @click.option('-e', '--epochs', default=100, help='training time')
-@click.option('-l', '--lrate', default=0.01, help='learning rate')
+@click.option('-l', '--lrate', default=0.001, help='initial learning rate')
 @click.option('-w', '--workers', default=0, help='number of workers loading training data')
 @click.option('-d', '--device', default='cpu', help='pytorch device')
 @click.option('-v', '--validation', default='val', help='validation set location')
@@ -39,7 +45,8 @@ def train(batch_size, epochs, lrate, workers, device, validation, ground_truth):
     criterion = nn.CrossEntropyLoss()
     model.train()
 
-    optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=lrate)
+    optimizer = optim.SGD(model.parameters(), lr=lrate)
+    #scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', verbose=True)
     for epoch in range(epochs):
         epoch_loss = 0
         with click.progressbar(train_data_loader, label='epoch {}'.format(epoch)) as bar:
@@ -51,9 +58,11 @@ def train(batch_size, epochs, lrate, workers, device, validation, ground_truth):
                 epoch_loss += loss.item()
                 loss.backward()
                 optimizer.step()
-                #print("===> Epoch[{}]({}/{}): Loss: {:.4f}".format(epoch, idx, len(train_data_loader), loss.item()))
+        torch.save(model.state_dict(), 'epoch_{}.ckpt'.format(epoch))
         print("epoch {} complete: avg. loss: {:.4f}".format(epoch, epoch_loss / len(train_data_loader)))
-        print("epoch {} validation loss: {:.4f}".format(epoch, evaluate(model, criterion, device, val_data_loader)))
+        val_loss = evaluate(model, criterion, device, val_data_loader)
+    #    scheduler.step(val_loss)
+        print("epoch {} validation loss: {:.4f}".format(epoch, val_loss))
 
 
 def evaluate(model, criterion, device, data_loader):
@@ -69,8 +78,44 @@ def evaluate(model, criterion, device, data_loader):
 
 
 @cli.command()
-def pred():
-    pass
+@click.option('-m', '--model', default=None, help='model file')
+@click.option('-d', '--device', default='cpu', help='pytorch device')
+@click.argument('images', nargs=-1)
+def pred(model, device, images):
+    m = PatchNet()
+    m.load_state_dict(torch.load(model))
+    device = torch.device(device)
+    m.to(device)
+
+    transform = ToTensor()
+
+    cmap = {0: (230, 25, 75, 127),
+            1: (60, 180, 75, 127),
+            2: (255, 225, 25, 127),
+            3: (0, 130, 200, 127)}
+
+    for img in images:
+        im = Image.open(img)
+        gray = im.convert('L')
+        gray = gray.resize((im.size[0]//3, im.size[1]//3))
+        sp = slic(gray, n_segments=3000)
+        props = regionprops(sp)
+        cls = np.zeros(sp.shape)
+        with click.progressbar(props, label='patches') as bar:
+            for prop in bar:
+                y = int(prop.centroid[0])
+                x = int(prop.centroid[1])
+                siz = 14
+                patch = gray.crop((x-siz, y-siz, x+siz, y+siz))
+                o = m.forward(transform(patch).unsqueeze(0).to(device))
+                cls[sp == prop.label] = o.argmax().item()
+        # color overlay
+        overlay = np.zeros(sp.shape + (4,))
+        for idx, val in cmap.items():
+            overlay[cls == idx] = val
+        gray = gray.convert('RGBA')
+        im = Image.alpha_composite(gray.convert('RGBA'), Image.fromarray(overlay.astype('uint8')))
+        im.save(os.path.splitext(img)[0] + '_out.png')
 
 if __name__ == '__main__':
     cli()
