@@ -46,7 +46,6 @@ def train(batch_size, epochs, lrate, workers, device, validation, ground_truth):
     model.train()
 
     optimizer = optim.SGD(model.parameters(), lr=lrate)
-    #scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min', verbose=True)
     for epoch in range(epochs):
         epoch_loss = 0
         with click.progressbar(train_data_loader, label='epoch {}'.format(epoch)) as bar:
@@ -61,7 +60,6 @@ def train(batch_size, epochs, lrate, workers, device, validation, ground_truth):
         torch.save(model.state_dict(), 'epoch_{}.ckpt'.format(epoch))
         print("epoch {} complete: avg. loss: {:.4f}".format(epoch, epoch_loss / len(train_data_loader)))
         val_loss = evaluate(model, criterion, device, val_data_loader)
-    #    scheduler.step(val_loss)
         print("epoch {} validation loss: {:.4f}".format(epoch, val_loss))
 
 
@@ -97,7 +95,7 @@ def pred(model, device, images):
     for img in images:
         im = Image.open(img)
         gray = im.convert('L')
-        gray = gray.resize((im.size[0]//3, im.size[1]//3))
+        gray = gray.resize((im.size[0]//8, im.size[1]//8))
         sp = slic(gray, n_segments=3000)
         props = regionprops(sp)
         cls = np.zeros(sp.shape)

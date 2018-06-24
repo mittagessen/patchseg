@@ -15,7 +15,7 @@ for img in glob.glob(sys.argv[1] + '/**/*.jpg', recursive=True):
     print(img)
     im = Image.open(img)
     im = im.convert('L')
-    im = im.resize((im.size[0]//3, im.size[1]//3))
+    im = im.resize((im.size[0]//8, im.size[1]//8))
 
     gt = Image.open(os.path.splitext(img)[0] + '.png')
     gt = gt.resize(im.size)
