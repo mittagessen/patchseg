@@ -111,20 +111,21 @@ def pred(model, device, images):
                 siz = 14
                 patch = gray.crop((x-siz, y-siz, x+siz, y+siz))
                 o = m.forward(transform(patch).unsqueeze(0).to(device))
+                # downscaled label map
                 cls[sp == prop.label] = o.argmax().item()
-        cls = imresize(cls, im.size[::-1], interp='nearest')
-        bin_im = nlbin(im)
+        cls = np.array(Image.fromarray(cls).resize(gray_unscaled.size, resample=Image.NEAREST))
+        bin_im = nlbin(gray_unscaled)
         bin_im = np.array(bin_im)
         bin_im = 1 - (bin_im / bin_im.max())
         overlay = np.zeros(bin_im.shape + (4,))
         fg_labels = bin_im * cls
-        Image.fromarray(fg_labels.astype('uint8')).save(os.path.splitext(img)[0] + '_labels.png')
+        Image.fromarray(fg_labels.astype('uint8')).resize(im.size).save(os.path.splitext(img)[0] + '_labels.png')
         for idx, val in cmap.items():
             overlay[cls == idx] = val
             layer = np.full(bin_im.shape, 255)
             layer[fg_labels == idx] = 0
-            Image.fromarray(layer.astype('uint8')).save(os.path.splitext(img)[0] + '_class_{}.png'.format(idx))
-        im = Image.alpha_composite(gray_unscaled.convert('RGBA'), Image.fromarray(overlay.astype('uint8')))
+            Image.fromarray(layer.astype('uint8')).resize(im.size).save(os.path.splitext(img)[0] + '_class_{}.png'.format(idx))
+        im = Image.alpha_composite(gray_unscaled.convert('RGBA'), Image.fromarray(overlay.astype('uint8'))).resize(im.size)
         im.save(os.path.splitext(img)[0] + '_overlay.png')
 
 
