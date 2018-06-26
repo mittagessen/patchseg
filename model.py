@@ -10,7 +10,7 @@ class PatchNet(nn.Module):
     def __init__(self):
         super(PatchNet, self).__init__()
         self.conv = nn.Sequential(nn.Conv2d(1, 4, 3), nn.ReLU(), nn.Dropout())
-        self.linear = nn.Linear(26*26*4, 4)
+        self.linear = nn.Sequential(nn.Linear(26*26*4, 100), nn.Linear(100, 4))
         self.init_weights()
 
     def forward(self, input):
